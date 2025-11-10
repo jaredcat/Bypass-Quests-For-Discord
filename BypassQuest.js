@@ -2,7 +2,7 @@
 // CONFIGURATION INITIALE
 // =============================================
 const CONFIG = {
-    language: "FR", // "FR" ou "EN"
+    language: "EN", // "FR" ou "EN"
     debug: true, // Affiche les logs détaillés
 };
 
