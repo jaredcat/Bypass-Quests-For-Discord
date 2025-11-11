@@ -26,9 +26,10 @@ Ce dépôt contient `BypassQuest.js`, un script à injecter dans la console du c
 
 1. Ouvrez Discord (de préférence l'application Desktop si la quête nécessite l'accès natif).
 2. Allez dans l'onglet `Quêtes` et acceptez la quête que vous souhaitez compléter.
-3. Ouvrez les outils développeur (Ctrl+Shift+I) et sélectionnez l'onglet Console.
-4. Collez le contenu de [BypassQuest.js](https://github.com/2forgetitouan/Bypass-Quests-For-Discord/blob/main/BypassQuest.js) et appuyez sur Entrée.
-5. Le script démarre automatiquement (`main()` est appelé). Les messages s'affichent en FR ou EN selon `CONFIG.language`.
+3. Ouvrez les outils développeur (Ctrl+Shift+I sur l'app ou F12 sur navigateur) et sélectionnez l'onglet Console.
+4. Si le collage est bloqué, tapez manuellement `allow pasting` dans la console et appuyez sur Entrée.
+5. Collez le contenu de [BypassQuest.js](https://github.com/2forgetitouan/Bypass-Quests-For-Discord/blob/main/BypassQuest.js) et appuyez sur Entrée.
+6. Le script démarre automatiquement (`main()` est appelé). Les messages s'affichent en FR ou EN selon `CONFIG.language`.
 
 #### Commandes utiles
 - stopQB() — Armer l'arrêt (apparaîtra un message), appelez `stopQB()` à nouveau dans les 5s pour confirmer et arrêter.
@@ -94,9 +95,10 @@ This repository contains `BypassQuest.js`, a script you paste into Discord's cli
 
 1. Open Discord (preferably the Desktop app if the quest requires native access).
 2. Go to the `Quests` tab and accept the quest you want to complete.
-3. Open DevTools (Ctrl+Shift+I / Cmd+Opt+I) and switch to the Console tab.
-4. Paste the contents of [BypassQuest.js](https://github.com/2forgetitouan/Bypass-Quests-For-Discord/blob/main/BypassQuest.js) and press Enter.
-5. The script starts automatically (`main()` is invoked). Messages will display in FR or EN according to `CONFIG.language`.
+3. Open DevTools (Ctrl+Shift+I in the application or F12 in the browser) and switch to the Console tab.
+4. If pasting is blocked, manually type `allow pasting` in the console and press Enter.
+5. Paste the contents of [BypassQuest.js](https://github.com/2forgetitouan/Bypass-Quests-For-Discord/blob/main/BypassQuest.js) and press Enter.
+6. The script starts automatically (`main()` is invoked). Messages will display in FR or EN according to `CONFIG.language`.
 
 #### Useful commands
 - stopQB() — Arms the stop (you'll see a message). Call `stopQB()` again within 5s to confirm and stop.
