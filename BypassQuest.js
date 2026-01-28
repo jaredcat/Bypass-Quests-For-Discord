@@ -4,6 +4,8 @@
 const CONFIG = {
     language: "EN", // "FR" ou "EN"
     debug: false, // Affiche les logs détaillés
+    processMultipleQuests: true, // Process all quests in sequence
+    hideCompletedQuests: true, // Hide completed/expired quests from UI
 };
 
 // =============================================
@@ -45,6 +47,13 @@ const TRANSLATIONS = {
         stopped_play_activity: `Arrêt pendant la boucle PLAY_ACTIVITY.`,
         error_handle_heartbeat: (e) => `Erreur dans handleHeartbeat (PLAY_ON_DESKTOP): ${e}`,
         error_handle_heartbeat_stream: (e) => `Erreur dans handleHeartbeatStream (STREAM_ON_DESKTOP): ${e}`,
+        mobile_quest_skipped: (taskName) => `Quête mobile ne peut pas être bypassée, ignorée : ${taskName}`,
+        all_quests_completed: `🎉 Toutes les quêtes acceptées ont été terminées !`,
+        waiting_next_quest: (s) => `En attente de ${s}s avant de traiter la prochaine quête...`,
+        found_quests: (count) => `Trouvé ${count} quête(s) acceptée(s) à terminer`,
+        processing_quest: (current, total, name) => `Traitement de la quête ${current}/${total}: ${name}`,
+        hidden_quests: (count) => `Masqué ${count} quête(s) terminée(s)/expirée(s) de l'interface`,
+        no_quests_to_hide: `Aucune quête terminée/expirée à masquer`,
     },
     EN: {
         questNotFound: "No active quest found!",
@@ -82,42 +91,12 @@ const TRANSLATIONS = {
         error_handle_heartbeat: (e) => `Error in handleHeartbeat (PLAY_ON_DESKTOP): ${e}`,
         error_handle_heartbeat_stream: (e) => `Error in handleHeartbeatStream (STREAM_ON_DESKTOP): ${e}`,
         mobile_quest_skipped: (taskName) => `Mobile quest cannot be bypassed, skipping: ${taskName}`,
-    },
-    FR: {
-        questNotFound: "Aucune quête active trouvée !",
-        questCompleted: "Quête terminée !",
-        spoofingVideo: (questName) => `Simulation de vidéo pour : ${questName}`,
-        spoofingGame: (appName, timeLeft) =>
-        `Jeu simulé : ${appName}. Temps restant : ~${timeLeft} min.`,
-        spoofingStream: (appName, timeLeft) =>
-        `Stream simulé : ${appName}. Temps restant : ~${timeLeft} min.`,
-        spoofingActivity: (questName) => `Activité simulée : ${questName}`,
-        controller_confirm_stop_arm: (s) => `Appelez stopQB() à nouveau dans ${s}s pour confirmer l'arrêt de QuestBot.`,
-        controller_stopping_by: (caller) => `Arrêt de QuestBot... appelé par : ${caller}`,
-        controller_stopping_unknown: `Arrêt de QuestBot... (appel inconnu)`,
-        controller_stopped: `QuestBot arrêté et déchargé.`,
-        controller_started: `QuestBot démarré. Relance en cours...`,
-        controller_start_no_main: `main() non disponible pour redémarrer ; veuillez recharger le script.`,
-        controller_stop_check_failed: (e) => `La vérification d'arrêt a échoué : ${e}`,
-        controller_cleanup_error: (e) => `Erreur pendant le nettoyage : ${e}`,
-        controller_start_main_error: (e) => `Erreur lors du lancement de main() : ${e}`,
-        controller_status_error: (e) => `Statut : erreur ${e}`,
-        main_unhandled_rejection: (e) => `Erreur inattendue dans main() : ${e}`,
-        controller_status_prefix: `Statut`,
-        main_quest_info: (taskName, needed, done) => `Type de quête: ${taskName}, Secondes nécessaires: ${needed}, Secondes déjà faites: ${done}`,
-        main_unhandled_type: (taskName) => `Type de quête non géré : ${taskName}`,
-        requires_desktop: `⚠️ Cette quête nécessite l'application desktop.`,
-        debug_outer_seconds: (s) => `(debug) outer secondsNeeded (closure) : ${s}`,
-        debug_cfg_snapshot: (snap) => `(debug) cfg snapshot: ${snap}`,
-        debug_could_not_stringify_cfg: (e) => `(debug) impossible de convertir cfg en string: ${e}`,
-        progression_seconds: (done, needed) => `Progression : ${done}/${needed} secondes`,
-        stopped_watch_video: `Arrêt pendant la boucle WATCH_VIDEO.`,
-        stopped_play_on_desktop: `Arrêt pendant le heartbeat PLAY_ON_DESKTOP.`,
-        stopped_stream_on_desktop: `Arrêt pendant le heartbeat STREAM_ON_DESKTOP.`,
-        stopped_play_activity: `Arrêt pendant la boucle PLAY_ACTIVITY.`,
-        error_handle_heartbeat: (e) => `Erreur dans handleHeartbeat (PLAY_ON_DESKTOP): ${e}`,
-        error_handle_heartbeat_stream: (e) => `Erreur dans handleHeartbeatStream (STREAM_ON_DESKTOP): ${e}`,
-        mobile_quest_skipped: (taskName) => `Quête mobile ne peut pas être bypassée, ignorée : ${taskName}`,
+        all_quests_completed: `🎉 All accepted quests completed!`,
+        waiting_next_quest: (s) => `Waiting ${s}s before processing next quest...`,
+        found_quests: (count) => `Found ${count} accepted quest(s) to complete`,
+        processing_quest: (current, total, name) => `Processing quest ${current}/${total}: ${name}`,
+        hidden_quests: (count) => `Hidden ${count} completed/expired quest(s) from UI`,
+        no_quests_to_hide: `No completed/expired quests to hide`,
     },
 };
 
@@ -270,46 +249,6 @@ window.statusQB = () => {
         return null;
     }
 };
-// startQB removed — restart the script by re-pasting/reloading the file
-
-// Utility: extract target value robustly from a quest API response body
-function extractTargetFromBody(body, taskKey, fallback = 0) {
-    if (!body) return fallback;
-    // Common paths we saw in different quest payloads
-    const tryPaths = [
-        body.config?.taskConfig?.tasks?.[taskKey]?.target,
-        body.config?.taskConfigV2?.tasks?.[taskKey]?.target,
-        body.config?.taskConfigV2?.target,
-        body.taskConfig?.tasks?.[taskKey]?.target,
-        body.taskConfigV2?.tasks?.[taskKey]?.target,
-        body.taskConfigV2?.target,
-        body.target,
-        body.config?.target,
-    ];
-    for (const v of tryPaths) {
-        if (typeof v === "number" && !isNaN(v)) return v;
-    }
-
-    // Fallback: do a shallow deep-search for the first numeric 'target' key
-    let found = null;
-    function deepSearch(obj, depth = 0) {
-        if (!obj || typeof obj !== "object" || depth > 6 || found !== null) return;
-        for (const k of Object.keys(obj)) {
-            try {
-                if (k === "target" && typeof obj[k] === "number") {
-                    found = obj[k];
-                    return;
-                }
-                if (typeof obj[k] === "object") deepSearch(obj[k], depth + 1);
-            } catch (e) {
-                // ignore
-            }
-            if (found !== null) return;
-        }
-    }
-    deepSearch(body, 0);
-    return found !== null ? found : fallback;
-}
 
 // =============================================
 // RÉCUPÉRATION DES STORES DISCORD
@@ -318,58 +257,221 @@ delete window.$;
 const wpRequire = webpackChunkdiscord_app.push([[Symbol()], {}, (r) => r]);
 webpackChunkdiscord_app.pop();
 const stores = Object.values(wpRequire.c);
-const QuestsStore = stores.find((x) => x?.exports?.Z?.__proto__?.getQuest).exports.Z;
-const ApplicationStreamingStore = stores.find((x) => x?.exports?.Z?.__proto__?.getStreamerActiveStreamMetadata).exports.Z;
-const RunningGameStore = stores.find((x) => x?.exports?.ZP?.getRunningGames).exports.ZP;
-const ChannelStore = stores.find((x) => x?.exports?.Z?.__proto__?.getAllThreadsForParent).exports.Z;
-const GuildChannelStore = stores.find((x) => x?.exports?.ZP?.getSFWDefaultChannel).exports.ZP;
-const FluxDispatcher = stores.find((x) => x?.exports?.Z?.__proto__?.flushWaitQueue).exports.Z;
-const api = stores.find((x) => x?.exports?.tn?.get).exports.tn;
+
+// Helper function to find exports dynamically without relying on minified property names
+function findExport(predicate) {
+    for (const store of stores) {
+        try {
+            if (!store?.exports) continue;
+            // Check if predicate matches the exports object itself
+            try {
+                if (predicate(store.exports)) return store.exports;
+            } catch {}
+            // Check all properties of exports
+            let keys;
+            try {
+                keys = Object.keys(store.exports);
+            } catch {
+                continue;
+            }
+            for (const key of keys) {
+                try {
+                    const exp = store.exports[key];
+                    if (exp && predicate(exp)) return exp;
+                } catch {}
+            }
+        } catch {}
+    }
+    return null;
+}
+
+// Helper for prototype method checks
+function hasProtoMethod(obj, method) {
+    return obj?.__proto__?.[method] !== undefined;
+}
+
+// Helper for direct method checks
+function hasMethod(obj, method) {
+    return typeof obj?.[method] === 'function';
+}
+
+const QuestsStore = findExport((x) => hasProtoMethod(x, 'getQuest'));
+const ApplicationStreamingStore = findExport((x) => hasProtoMethod(x, 'getStreamerActiveStreamMetadata'));
+const RunningGameStore = findExport((x) => hasMethod(x, 'getRunningGames'));
+const ChannelStore = findExport((x) => hasProtoMethod(x, 'getAllThreadsForParent'));
+const GuildChannelStore = findExport((x) => hasMethod(x, 'getSFWDefaultChannel'));
+const FluxDispatcher = findExport((x) => hasProtoMethod(x, 'flushWaitQueue'));
+const api = findExport((x) => hasMethod(x, 'get') && hasMethod(x, 'post'));
+
+// Validation - warn if any store wasn't found
+const storeChecks = {
+    QuestsStore,
+    ApplicationStreamingStore,
+    RunningGameStore,
+    ChannelStore,
+    GuildChannelStore,
+    FluxDispatcher,
+    api,
+};
+for (const [name, store] of Object.entries(storeChecks)) {
+    if (!store) log(`Failed to find ${name} - Discord may have updated`, 'error');
+}
 
 // =============================================
-// LOGIQUE PRINCIPALE
+// HIDE COMPLETED/EXPIRED QUESTS
 // =============================================
-async function main() {
-    // mark this run with a unique id so older handlers can ignore themselves
-    try { window.QuestBotRunId = (window.QuestBotRunId || 0) + 1; window.QuestBotController.runId = window.QuestBotRunId; } catch (e) {}
-    
-    // Get all quests and find one that's not mobile and not completed
+function hideCompletedQuests() {
+    const indicators = ['View Reward', 'Quest ended', 'See Code'];
+    const cardsToHide = new Set();
+
+    // Use TreeWalker to efficiently find text nodes containing completion indicators
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+
+    while (walker.nextNode()) {
+        const text = walker.currentNode.textContent;
+        if (!indicators.some((indicator) => text?.includes(indicator))) continue;
+
+        // Walk up from this text node to find the quest card
+        // Quest cards have id="quest-tile-{questId}" which is a stable identifier
+        let el = walker.currentNode.parentElement;
+        while (el && el !== document.body) {
+            // Check if this element is a quest tile (has id starting with "quest-tile-")
+            if (el.id && el.id.startsWith('quest-tile-')) {
+                cardsToHide.add(el);
+                break;
+            }
+            el = el.parentElement;
+        }
+    }
+
+    // Hide identified quest cards
+    cardsToHide.forEach((card) => (card.style.display = 'none'));
+
+    if (cardsToHide.size > 0) {
+        log(t('hidden_quests', cardsToHide.size), 'info');
+    } else {
+        log(t('no_quests_to_hide'), 'debug');
+    }
+
+    return cardsToHide.size;
+}
+
+// =============================================
+// HELPER: Get all valid quests
+// =============================================
+function getAllValidQuests() {
     const allQuests = [...QuestsStore.quests.values()];
-    let quest = null;
-    
+    const validQuests = [];
+
     for (const q of allQuests) {
         const isValid = q.id !== "1248385850622869556" &&
                        q.userStatus?.enrolledAt &&
                        !q.userStatus?.completedAt &&
                        new Date(q.config.expiresAt).getTime() > Date.now();
-        
+
         if (!isValid) continue;
-        
+
         const taskName = Object.keys(q.config.taskConfig?.tasks || q.config.taskConfigV2?.tasks || {})[0];
-        
+
         // Skip mobile quests
         if (taskName && taskName.includes('MOBILE')) {
             log(t('mobile_quest_skipped', taskName), 'info');
             continue;
         }
-        
-        quest = q;
-        break;
+
+        validQuests.push(q);
     }
+
+    return validQuests;
+}
+
+// =============================================
+// LOGIQUE PRINCIPALE - PROCESS ALL QUESTS
+// =============================================
+async function main() {
+    // mark this run with a unique id so older handlers can ignore themselves
+    try { window.QuestBotRunId = (window.QuestBotRunId || 0) + 1; window.QuestBotController.runId = window.QuestBotRunId; } catch (e) {}
     
-    if (!quest) {
+    // Hide completed/expired quests from UI if enabled
+    if (CONFIG.hideCompletedQuests) {
+        try {
+            hideCompletedQuests();
+        } catch (e) {
+            log(`Error hiding completed quests: ${e}`, 'debug');
+        }
+    }
+
+    if (!CONFIG.processMultipleQuests) {
+        // Original behavior: process one quest
+        await processSingleQuest();
+        return;
+    }
+
+    // New behavior: process all quests
+    const validQuests = getAllValidQuests();
+
+    if (validQuests.length === 0) {
         log(t('questNotFound'), 'warn');
         return;
     }
-    
+
+    log(t('found_quests', validQuests.length), 'success');
+
+    for (let i = 0; i < validQuests.length; i++) {
+        // Check if stopped
+        try {
+            if ((window.QuestBotRunId || 0) !== window.QuestBotController.runId || !window.QuestBotController.running) {
+                log('Stopped processing quests', 'warn');
+                return;
+            }
+        } catch (e) {
+            if (!window.QuestBotController.running) {
+                log('Stopped processing quests', 'warn');
+                return;
+            }
+        }
+
+        const quest = validQuests[i];
+        const { messages } = quest.config;
+        log(t('processing_quest', i + 1, validQuests.length, messages.questName), 'info');
+
+        await processQuest(quest);
+
+        // Wait between quests
+        if (i < validQuests.length - 1) {
+            const delay = 3000;
+            log(t('waiting_next_quest', delay/1000), 'info');
+            await new Promise((r) => setTimeout(r, delay));
+        }
+    }
+
+    log(t('all_quests_completed'), 'success');
+}
+
+// =============================================
+// PROCESS SINGLE QUEST (original logic)
+// =============================================
+async function processSingleQuest() {
+    const validQuests = getAllValidQuests();
+
+    if (validQuests.length === 0) {
+        log(t('questNotFound'), 'warn');
+        return;
+    }
+
+    await processQuest(validQuests[0]);
+}
+
+// =============================================
+// PROCESS ONE QUEST
+// =============================================
+async function processQuest(quest) {
     const { application, messages, taskConfig, taskConfigV2 } = quest.config;
     const taskName = Object.keys(taskConfig?.tasks || taskConfigV2?.tasks || {})[0];
     const secondsNeeded = taskConfig?.tasks[taskName]?.target || taskConfigV2?.tasks[taskName]?.target || taskConfigV2?.target || 0;
     let secondsDone = quest.userStatus?.progress?.[taskName]?.value || 0;
-    const timeLeft = Math.ceil((secondsNeeded - secondsDone) / 60);
     
     log(t('main_quest_info', taskName, secondsNeeded, secondsDone), 'info');
-    
     
     // Logique par type de quête
     switch (taskName) {
@@ -465,52 +567,51 @@ async function spoofGame(quest, application, secondsDone, secondsNeeded) {
         added: [fakeGame],
         games: [fakeGame],
     });
-    // Register cleanup to restore running games and unsubscribe handler on stop
-    window.QuestBotController.addCleanup(() => {
-        try { RunningGameStore.getRunningGames = () => realGames; } catch (e) {}
-        try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat); } catch (e) {}
-    });
-    
-    const handlerRunId = window.QuestBotRunId || window.QuestBotController.runId;
-    const handleHeartbeat = async (data) => {
-        // ignore if this handler belongs to an older run
-        if (handlerRunId !== (window.QuestBotRunId || window.QuestBotController.runId)) {
-            try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat); } catch (e) {}
-            return;
-        }
-        try {
-            const progress = data.userStatus.progress.PLAY_ON_DESKTOP.value;
-            // Debug: show the outer secondsNeeded captured by closure
-            log(t('debug_outer_seconds', secondsNeeded), 'debug');
-            // Re-fetch quest to get up-to-date target in case the structure changed
-            const res = await api.get({ url: `/quests/${id}` });
-            const cfg = res.body.config || {};
-            // Debug: log a small snapshot of cfg to help understand structure
-            try {
-                const snap = JSON.stringify(cfg).slice(0, 1000);
-                log(t('debug_cfg_snapshot', snap + (snap.length>=1000?"... (truncated)":"")), 'debug');
-            } catch (e) {
-                log(t('debug_could_not_stringify_cfg', e), 'debug');
-            }
-            const currentTarget = extractTargetFromBody(res.body, 'PLAY_ON_DESKTOP', secondsNeeded);
 
-            log(t('progression_seconds', progress, currentTarget), 'info');
-            if (!window.QuestBotController.running) {
-                log(t('stopped_play_on_desktop'), 'warn');
+    const handlerRunId = window.QuestBotRunId || window.QuestBotController.runId;
+
+    // Return a promise that resolves when quest is complete
+    return new Promise((resolve) => {
+        const handleHeartbeat = (data) => {
+            // ignore if this handler belongs to an older run
+            if (handlerRunId !== (window.QuestBotRunId || window.QuestBotController.runId)) {
                 try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat); } catch (e) {}
+                resolve();
                 return;
             }
-                if (progress >= currentTarget) {
-                log(t('questCompleted'), 'success');
-                try { RunningGameStore.getRunningGames = () => realGames; } catch (e) {}
-                try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat); } catch (e) {}
+            try {
+                // Get progress from heartbeat data (matching working script approach)
+                const progress = config.configVersion === 1
+                    ? data.userStatus.streamProgressSeconds
+                    : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
+
+                log(t('progression_seconds', progress, secondsNeeded), 'info');
+
+                if (!window.QuestBotController.running) {
+                    log(t('stopped_play_on_desktop'), 'warn');
+                    try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat); } catch (e) {}
+                    resolve();
+                    return;
+                }
+                if (progress >= secondsNeeded) {
+                    log(t('questCompleted'), 'success');
+                    try { RunningGameStore.getRunningGames = () => realGames; } catch (e) {}
+                    try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat); } catch (e) {}
+                    resolve();
+                }
+            } catch (e) {
+                log(t('error_handle_heartbeat', e), 'error');
             }
-        } catch (e) {
-            log(t('error_handle_heartbeat', e), 'error');
-        }
-    };
-    FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat);
-    // ensure handler ignores stale runs: capture current run id
+        };
+
+        // Register cleanup to restore running games and unsubscribe handler on stop
+        window.QuestBotController.addCleanup(() => {
+            try { RunningGameStore.getRunningGames = () => realGames; } catch (e) {}
+            try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat); } catch (e) {}
+        });
+
+        FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeat);
+    });
 }
 
 
@@ -534,50 +635,51 @@ async function spoofStream(quest, application, secondsDone, secondsNeeded) {
     ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({
         id: application.id,
         pid: Math.floor(Math.random() * 30000) + 1000,
-                                                                       sourceName: null,
+        sourceName: null,
     });
-    // Register cleanup to restore streaming metadata and unsubscribe handler on stop
-    window.QuestBotController.addCleanup(() => {
-        try { ApplicationStreamingStore.getStreamerActiveStreamMetadata = realFunc; } catch (e) {}
-        try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream); } catch (e) {}
-    });
-    
-    const handleHeartbeatStream = async (data) => {
-        // ignore if this handler belongs to an older run
-        if (handlerRunId !== (window.QuestBotRunId || window.QuestBotController.runId)) {
-            try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream); } catch (e) {}
-            return;
-        }
-        try {
-            const progress = data.userStatus.progress.STREAM_ON_DESKTOP.value;
-            // Debug: show the outer secondsNeeded captured by closure
-            log(t('debug_outer_seconds', secondsNeeded), 'debug');
-            const res = await api.get({ url: `/quests/${id}` });
-            const cfg = res.body.config || {};
-            try {
-                const snap = JSON.stringify(cfg).slice(0, 1000);
-                log(t('debug_cfg_snapshot', snap + (snap.length>=1000?"... (truncated)":"")), 'debug');
-            } catch (e) {
-                log(t('debug_could_not_stringify_cfg', e), 'debug');
-            }
-            const currentTarget = extractTargetFromBody(res.body, 'STREAM_ON_DESKTOP', secondsNeeded);
 
-            log(t('progression_seconds', progress, currentTarget), 'info');
-            if (!window.QuestBotController.running) {
-                log(t('stopped_stream_on_desktop'), 'warn');
+    // Return a promise that resolves when quest is complete
+    return new Promise((resolve) => {
+        const handleHeartbeatStream = (data) => {
+            // ignore if this handler belongs to an older run
+            if (handlerRunId !== (window.QuestBotRunId || window.QuestBotController.runId)) {
                 try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream); } catch (e) {}
+                resolve();
                 return;
             }
-                if (progress >= currentTarget) {
-                log(t('questCompleted'), 'success');
-                try { ApplicationStreamingStore.getStreamerActiveStreamMetadata = realFunc; } catch (e) {}
-                try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream); } catch (e) {}
+            try {
+                // Get progress from heartbeat data (matching working script approach)
+                const progress = config.configVersion === 1
+                    ? data.userStatus.streamProgressSeconds
+                    : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
+
+                log(t('progression_seconds', progress, secondsNeeded), 'info');
+
+                if (!window.QuestBotController.running) {
+                    log(t('stopped_stream_on_desktop'), 'warn');
+                    try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream); } catch (e) {}
+                    resolve();
+                    return;
+                }
+                if (progress >= secondsNeeded) {
+                    log(t('questCompleted'), 'success');
+                    try { ApplicationStreamingStore.getStreamerActiveStreamMetadata = realFunc; } catch (e) {}
+                    try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream); } catch (e) {}
+                    resolve();
+                }
+            } catch (e) {
+                log(t('error_handle_heartbeat_stream', e), 'error');
             }
-        } catch (e) {
-            log(t('error_handle_heartbeat_stream', e), 'error');
-        }
-    };
-    FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream);
+        };
+
+        // Register cleanup to restore streaming metadata and unsubscribe handler on stop
+        window.QuestBotController.addCleanup(() => {
+            try { ApplicationStreamingStore.getStreamerActiveStreamMetadata = realFunc; } catch (e) {}
+            try { FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream); } catch (e) {}
+        });
+
+        FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", handleHeartbeatStream);
+    });
 }
 // =============================================
 // SIMULATION ACTIVITÉ
